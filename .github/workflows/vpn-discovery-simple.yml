@@ -1,0 +1,76 @@
+name: VPN Discovery - Simple Syntax (Fixed)
+on:
+  workflow_dispatch:
+    inputs:
+      target_network:
+        description: 'Target network'
+        required: true
+        default: '10.8.0.0/24'
+
+jobs:
+  vpn-gateway-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: VPN Gateway Discovery
+        run: |
+          nix-shell -p nmap --run 'nmap -sT -p 22,80,443 10.8.0.1 > vpn-gateway.txt'
+          nix-shell -p curl --run 'curl -k -v https://10.8.0.1/ > vpn-interface.txt 2>&1'
+      - name: Upload Gateway Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpn-gateway-results
+          path: "*.txt"
+
+  vpn-network-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: VPN Network Host Discovery
+        run: |
+          nix-shell -p nmap --run 'nmap -sn 10.8.0.0/24 > vpn-hosts.txt'
+          nix-shell -p nmap --run 'nmap -sT -p 22 10.8.0.10 > vpn-host-10-ssh.txt'
+      - name: Upload Network Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpn-network-results
+          path: "*.txt"
+
+  ssh-bypass-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: SSH Bypass Testing
+        run: |
+          nix-shell -p openssh --run 'ssh -o ConnectTimeout=5 -o Port=80 dm@10.8.0.10 whoami > ssh-alt-port.txt 2>&1'
+          nix-shell -p netcat --run 'nc -z 10.8.0.10 22 > ssh-connectivity.txt 2>&1'
+      - name: Upload SSH Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: ssh-bypass-results
+          path: "*.txt"
+
+  results-analysis:
+    needs: [vpn-gateway-scan, vpn-network-scan, ssh-bypass-tests]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-results
+      - name: Analyze Results
+        run: |
+          nix-shell -p coreutils --run 'echo "=== VPN DISCOVERY ANALYSIS ===" > final-results.txt'
+          nix-shell -p coreutils --run 'echo "Timestamp: $(date)" >> final-results.txt'
+          nix-shell -p coreutils --run 'find all-results -name "*.txt" -exec cat {} \; >> final-results.txt'
+      - name: Upload Final Analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpn-discovery-final-analysis
+          path: final-results.txt
