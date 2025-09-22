@@ -1,0 +1,31 @@
+name: Working Research Test
+on:
+  workflow_dispatch:
+
+env:
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+jobs:
+  research-success:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Clone Methodology
+        run: nix-shell -p git --run 'cd ~ && git clone https://github.com/garmir/claude-methodology.git .claude'
+      - name: Execute Research
+        run: |
+          cd ~ && nix-shell -p nodejs expect --run 'expect -c "
+            set timeout 600
+            spawn npx @anthropic-ai/claude-code --dangerously-skip-permissions \"Research methodology optimization: analyze workflow patterns and generate improvements\"
+            expect { -re {.*bypass permissions.*} { send \"2\r\" } }
+            expect { -re {.*research.*|.*Write.*} { exit 0 } timeout { exit 1 } }
+          " > research-output.txt'
+          ls -la > file-list.txt
+      - name: Upload Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: research-success-results
+          path: |
+            research-output.txt
+            file-list.txt
