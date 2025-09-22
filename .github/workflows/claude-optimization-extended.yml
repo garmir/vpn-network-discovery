@@ -1,0 +1,31 @@
+name: Claude Optimization - Extended Timeout
+on:
+  workflow_dispatch:
+
+env:
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+jobs:
+  claude-repo-optimization:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Clone .claude Methodology
+        run: nix-shell -p git --run 'cd ~ && git clone https://github.com/garmir/claude-methodology.git .claude'
+      - name: Claude Repository Self-Optimization
+        run: |
+          cd ~ && nix-shell -p nodejs expect --run 'expect -c "
+            set timeout 600
+            spawn npx @anthropic-ai/claude-code --dangerously-skip-permissions \"Analyze .claude repository and research optimizations: 1) Review all methodology files, 2) Research 2025 best practices online, 3) Generate specific improvements for workflow patterns, NPX spawn approaches, and GitHub Actions integration. Output concrete recommendations.\"
+            expect { -re {.*bypass permissions.*} { send \"2\r\" } }
+            expect { -re {.*optimization.*|.*recommendations.*|.*improvements.*|.*Write.*} {
+              send \"\\n\"
+              exit 0
+            } timeout { exit 1 } }
+          "' > claude-optimization-results.txt
+      - name: Upload Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-repo-optimizations
+          path: "*.txt *.md"
