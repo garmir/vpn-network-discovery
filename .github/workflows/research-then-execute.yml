@@ -1,0 +1,104 @@
+name: Research-Then-Execute Methodology
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Research task'
+        required: true
+        default: 'network discovery optimization'
+
+env:
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+jobs:
+  # Phase 1: Research Optimal Tooling
+  tool-research:
+    runs-on: ubuntu-latest
+    outputs:
+      recommended_tools: ${{ steps.research.outputs.tools }}
+      methodology: ${{ steps.research.outputs.methodology }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Install Claude Code
+        run: nix-shell -p nodejs npm --run 'npm install -g @anthropic-ai/claude-code'
+      - name: Clone .claude Methodology
+        run: nix-shell -p git --run 'cd ~ && git clone https://github.com/garmir/claude-methodology.git .claude'
+      - name: Research Optimal Tools
+        id: research
+        run: |
+          cd ~ && nix-shell -p nodejs npm curl expect --run 'expect -c "
+            set timeout 300
+            spawn npx @anthropic-ai/claude-code --dangerously-skip-permissions \"Research online: what are the best network discovery tools for ${{ github.event.inputs.task }} in 2025? Find faster alternatives to nmap, optimal tool combinations, and recommended nix packages. Output the exact nix-shell command with optimal tools.\"
+            expect { -re {.*bypass permissions.*} { send \"2\r\" } }
+            expect { -re {.*nix-shell.*|.*tools.*|.*Write.*} {
+              # Extract tool recommendations from output
+              send \"q\"
+              exit 0
+            }
+            timeout { exit 1 } }
+          "' > tool-research-results.txt
+
+          # Extract recommendations (simplified for demo)
+          echo "tools=masscan,rustscan,nmap,curl" >> $GITHUB_OUTPUT
+          echo "methodology=parallel-scanning-with-fallbacks" >> $GITHUB_OUTPUT
+      - name: Upload Research Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: tool-research-results
+          path: tool-research-results.txt
+
+  # Phase 2: Execute with Researched Tools
+  optimized-execution:
+    needs: tool-research
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Install Claude Code
+        run: nix-shell -p nodejs npm --run 'npm install -g @anthropic-ai/claude-code'
+      - name: Clone .claude Methodology
+        run: nix-shell -p git --run 'cd ~ && git clone https://github.com/garmir/claude-methodology.git .claude'
+      - name: Execute with Optimal Tools
+        run: |
+          cd ~ && nix-shell -p nodejs npm ${{ needs.tool-research.outputs.recommended_tools }} expect --run 'expect -c "
+            set timeout 300
+            spawn npx @anthropic-ai/claude-code --dangerously-skip-permissions \"Using researched optimal tools (${{ needs.tool-research.outputs.recommended_tools }}) and methodology (${{ needs.tool-research.outputs.methodology }}): execute ${{ github.event.inputs.task }} with maximum efficiency. Reference .claude documentation patterns.\"
+            expect { -re {.*bypass permissions.*} { send \"2\r\" } }
+            expect { -re {.*execution.*|.*results.*|.*Write.*} { exit 0 } timeout { exit 1 } }
+          "'
+      - name: Upload Execution Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: optimized-execution-results
+          path: "*.txt *.md"
+
+  # Phase 3: Methodology Learning and Documentation
+  methodology-learning:
+    needs: [tool-research, optimized-execution]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Install Claude Code
+        run: nix-shell -p nodejs npm --run 'npm install -g @anthropic-ai/claude-code'
+      - name: Clone .claude Methodology
+        run: nix-shell -p git --run 'cd ~ && git clone https://github.com/garmir/claude-methodology.git .claude'
+      - name: Download All Results
+        uses: actions/download-artifact@v4
+        with:
+          path: all-research-results
+      - name: Learn and Update Methodology
+        run: |
+          cd ~ && nix-shell -p nodejs npm coreutils jq expect --run 'expect -c "
+            set timeout 300
+            spawn npx @anthropic-ai/claude-code --dangerously-skip-permissions \"Analyze research and execution results. Compare tool performance, validate methodology effectiveness, document successes and failures. Update .claude repository knowledge with learned patterns for future optimization.\"
+            expect { -re {.*bypass permissions.*} { send \"2\r\" } }
+            expect { -re {.*methodology.*|.*documentation.*|.*Write.*} { exit 0 } timeout { exit 1 } }
+          "'
+      - name: Upload Learning Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: methodology-learning-results
+          path: "*.txt *.md"
