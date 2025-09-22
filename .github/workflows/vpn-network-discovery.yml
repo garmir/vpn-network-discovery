@@ -1,0 +1,158 @@
+name: VPN Network Discovery - Exponential Tree Optimization
+on:
+  workflow_dispatch:
+    inputs:
+      target_network:
+        description: 'Target VPN network range'
+        required: true
+        default: '10.8.0.0/24'
+      discovery_depth:
+        description: 'Discovery depth level'
+        required: true
+        default: 'comprehensive'
+        type: choice
+        options:
+        - quick
+        - standard
+        - comprehensive
+
+jobs:
+  # Level 0: Root Coordinator (O(1))
+  root-coordinator:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.setup.outputs.matrix }}
+      network_segments: ${{ steps.setup.outputs.network_segments }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - id: setup
+        run: |
+          # Generate exponential discovery matrix
+          MATRIX='{"include":[]}'
+          NETWORK_SEGMENTS='["10.8.0.0/24","192.168.0.0/24","192.168.50.0/24"]'
+
+          # Level 1: Parallel Branches (O(log n))
+          MATRIX=$(echo $MATRIX | jq '.include += [
+            {"branch": "vpn-gateway", "target": "10.8.0.1", "tools": "nmap curl dnsutils"},
+            {"branch": "target-network", "target": "192.168.0.0/24", "tools": "nmap nettools iproute2"},
+            {"branch": "wifi-segment", "target": "192.168.50.0/24", "tools": "nmap curl samba"}
+          ]')
+
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+          echo "network_segments=$NETWORK_SEGMENTS" >> $GITHUB_OUTPUT
+
+  # Level 1: Parallel Branch Execution
+  network-discovery:
+    needs: root-coordinator
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.root-coordinator.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Network Discovery - ${{ matrix.branch }}
+        run: |
+          case "${{ matrix.branch }}" in
+            "vpn-gateway")
+              nix-shell -p ${{ matrix.tools }} --run 'nmap -sT -p 22,80,443,1194,1723 ${{ matrix.target }} > vpn-gateway-services.txt'
+              nix-shell -p ${{ matrix.tools }} --run 'curl -k -v https://${{ matrix.target }}/webpages/index.html > vpn-gateway-interface.txt 2>&1'
+              nix-shell -p ${{ matrix.tools }} --run 'dig @${{ matrix.target }} ANY vpn.local > vpn-dns-query.txt 2>&1'
+              ;;
+            "target-network")
+              nix-shell -p ${{ matrix.tools }} --run 'nmap -sn ${{ matrix.target }} > target-network-hosts.txt'
+              nix-shell -p ${{ matrix.tools }} --run 'nmap -sT -p 22,80,443,8080 192.168.0.15 192.168.0.175 > target-services.txt'
+              nix-shell -p ${{ matrix.tools }} --run 'ip route show | grep "192.168.0" > target-routing.txt'
+              ;;
+            "wifi-segment")
+              nix-shell -p ${{ matrix.tools }} --run 'nmap -sn ${{ matrix.target }} > wifi-network-hosts.txt'
+              nix-shell -p ${{ matrix.tools }} --run 'nmap -sT -p 22,80,443,445 192.168.50.1 192.168.50.40 > wifi-services.txt'
+              nix-shell -p ${{ matrix.tools }} --run 'smbclient -L 192.168.50.40 -N > smb-shares.txt 2>&1'
+              ;;
+          esac
+
+      - name: Upload Discovery Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: network-discovery-${{ matrix.branch }}
+          path: "*.txt"
+
+  # Level 2: Deep Service Enumeration
+  service-enumeration:
+    needs: [root-coordinator, network-discovery]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [ssh-bypass, web-interfaces, vpn-management, authentication]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Service Enumeration - ${{ matrix.service }}
+        run: |
+          case "${{ matrix.service }}" in
+            "ssh-bypass")
+              nix-shell -p nmap openssh netcat --run 'nmap -sT -p 22,2222,222,22222 10.8.0.1 192.168.0.15 > ssh-alt-ports.txt'
+              nix-shell -p openssh --run 'ssh -o ConnectTimeout=3 -o Port=80 dm@192.168.0.15 whoami > ssh-port-80-test.txt 2>&1'
+              nix-shell -p openssh --run 'ssh -o ConnectTimeout=3 -o Port=443 dm@192.168.0.15 whoami > ssh-port-443-test.txt 2>&1'
+              ;;
+            "web-interfaces")
+              nix-shell -p curl --run 'curl -k -v https://10.8.0.1/cgi-bin/luci > luci-interface.txt 2>&1'
+              nix-shell -p curl --run 'curl -v http://192.168.50.1/Main_Login.asp > asus-login.txt 2>&1'
+              nix-shell -p curl --run 'curl -k -v https://192.168.0.175/admin/login > pihole-admin.txt 2>&1'
+              ;;
+            "vpn-management")
+              nix-shell -p nmap --run 'nmap --script openvpn-enum,ssl-enum-ciphers 10.8.0.1 > vpn-enum.txt'
+              nix-shell -p curl --run 'curl -k -v https://10.8.0.1/cgi-bin/luci/rpc/sys > luci-rpc.txt 2>&1'
+              ;;
+            "authentication")
+              nix-shell -p curl --run 'curl -X POST -d "username=admin&password=admin" https://10.8.0.1/cgi-bin/luci > auth-test-1.txt 2>&1'
+              nix-shell -p curl --run 'curl -X POST -d "username=admin&password=1121" https://10.8.0.1/cgi-bin/luci > auth-test-2.txt 2>&1'
+              ;;
+          esac
+
+      - name: Upload Service Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-enum-${{ matrix.service }}
+          path: "*.txt"
+
+  # Level 3: Aggregation and Analysis
+  results-aggregation:
+    needs: [network-discovery, service-enumeration]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Download All Results
+        uses: actions/download-artifact@v4
+        with:
+          path: discovery-results
+
+      - name: Aggregate and Analyze
+        run: |
+          nix-shell -p coreutils jq --run '
+            echo "=== VPN NETWORK DISCOVERY RESULTS ===" > final-analysis.txt
+            echo "Timestamp: $(date)" >> final-analysis.txt
+
+            echo -e "\n## Host Discovery" >> final-analysis.txt
+            find discovery-results -name "*hosts.txt" -exec cat {} \; >> final-analysis.txt
+
+            echo -e "\n## Service Enumeration" >> final-analysis.txt
+            find discovery-results -name "*services.txt" -exec cat {} \; >> final-analysis.txt
+
+            echo -e "\n## Authentication Tests" >> final-analysis.txt
+            find discovery-results -name "auth-test-*.txt" -exec cat {} \; >> final-analysis.txt
+
+            echo -e "\n## SSH Bypass Attempts" >> final-analysis.txt
+            find discovery-results -name "ssh-*.txt" -exec cat {} \; >> final-analysis.txt
+          '
+
+      - name: Upload Final Analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpn-network-analysis-complete
+          path: final-analysis.txt
