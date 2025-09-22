@@ -1,0 +1,92 @@
+name: Claude Repository Self-Optimization Research
+on:
+  workflow_dispatch:
+    inputs:
+      optimization_focus:
+        description: 'Optimization focus area'
+        required: true
+        default: 'workflow patterns and methodology improvements'
+
+env:
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+jobs:
+  # Research Current .claude Repository State
+  analyze-current-claude-repo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Clone and Analyze .claude Repository
+        run: |
+          nix-shell -p git --run 'cd ~ && git clone https://github.com/garmir/claude-methodology.git .claude'
+          cd ~ && nix-shell -p nodejs expect --run 'expect -c "
+            set timeout 180
+            spawn npx @anthropic-ai/claude-code --dangerously-skip-permissions \"Analyze the .claude repository structure and methodology files. Identify: 1) Redundant patterns, 2) Missing methodologies, 3) Workflow optimization opportunities, 4) Documentation gaps. Focus on ${{ github.event.inputs.optimization_focus }}.\"
+            expect { -re {.*bypass permissions.*} { send \"2\r\" } }
+            expect { -re {.*analysis.*|.*Write.*} {
+              send \"\\n\"
+              exit 0
+            } timeout { exit 1 } }
+          "' > claude-repo-analysis.txt
+      - name: Upload Analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-repo-analysis
+          path: "*.txt *.md"
+
+  # Research Best Practices Online
+  research-optimization-patterns:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Clone .claude Repository
+        run: nix-shell -p git --run 'cd ~ && git clone https://github.com/garmir/claude-methodology.git .claude'
+      - name: Research Optimization Patterns
+        run: |
+          cd ~ && nix-shell -p nodejs curl expect --run 'expect -c "
+            set timeout 180
+            spawn npx @anthropic-ai/claude-code --dangerously-skip-permissions \"Research online: 1) Latest GitHub Actions optimization patterns 2025, 2) Advanced nix-shell workflows, 3) Claude Code automation best practices, 4) Repository organization improvements. Find specific optimizations for ${{ github.event.inputs.optimization_focus }}.\"
+            expect { -re {.*bypass permissions.*} { send \"2\r\" } }
+            expect { -re {.*research.*|.*patterns.*|.*Write.*} {
+              send \"\\n\"
+              exit 0
+            } timeout { exit 1 } }
+          "' > optimization-research.txt
+      - name: Upload Research
+        uses: actions/upload-artifact@v4
+        with:
+          name: optimization-research
+          path: "*.txt *.md"
+
+  # Generate Improvement Recommendations
+  generate-improvements:
+    needs: [analyze-current-claude-repo, research-optimization-patterns]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Clone .claude Repository
+        run: nix-shell -p git --run 'cd ~ && git clone https://github.com/garmir/claude-methodology.git .claude'
+      - name: Download All Research
+        uses: actions/download-artifact@v4
+        with:
+          path: research-results
+      - name: Generate .claude Repository Improvements
+        run: |
+          cd ~ && nix-shell -p nodejs coreutils expect --run 'expect -c "
+            set timeout 180
+            spawn npx @anthropic-ai/claude-code --dangerously-skip-permissions \"Based on repository analysis and online research: generate specific improvements for .claude methodology repository. Create: 1) Updated workflow patterns, 2) New methodology files, 3) Optimized documentation structure, 4) Enhanced automation patterns. Output concrete recommendations with implementation details.\"
+            expect { -re {.*bypass permissions.*} { send \"2\r\" } }
+            expect { -re {.*improvements.*|.*recommendations.*|.*Write.*} {
+              send \"\\n\"
+              exit 0
+            } timeout { exit 1 } }
+          "' > claude-improvements.txt
+      - name: Upload Improvements
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-repository-improvements
+          path: "*.txt *.md"
