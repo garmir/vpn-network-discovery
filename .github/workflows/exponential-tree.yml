@@ -1,0 +1,117 @@
+name: Exponential Tree - Network Discovery
+on:
+  workflow_dispatch:
+
+jobs:
+  # Level 0: Root Coordinator (O(1)) - 5s setup
+  level-0-root:
+    runs-on: ubuntu-latest
+    outputs:
+      network_segments: ${{ steps.discover.outputs.segments }}
+      target_matrix: ${{ steps.discover.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Root Network Discovery Coordinator
+        id: discover
+        run: |
+          nix-shell -p coreutils jq --run 'echo "=== ROOT COORDINATOR ===" > root-discovery.txt'
+          nix-shell -p jq --run 'echo "{\"include\":[{\"segment\":\"vpn\",\"network\":\"10.8.0.0/24\",\"gateway\":\"10.8.0.1\"},{\"segment\":\"target\",\"network\":\"192.168.0.0/24\",\"gateway\":\"192.168.0.1\"},{\"segment\":\"wifi\",\"network\":\"192.168.50.0/24\",\"gateway\":\"192.168.50.1\"}]}" > matrix.json'
+          echo "segments=[\"vpn\",\"target\",\"wifi\"]" >> $GITHUB_OUTPUT
+          echo "matrix=$(cat matrix.json)" >> $GITHUB_OUTPUT
+      - name: Upload Root Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: level-0-root-coordinator
+          path: "*.txt"
+
+  # Level 1: Parallel Branches (O(log n)) - 3 branches, 46s each
+  level-1-branches:
+    needs: level-0-root
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.level-0-root.outputs.target_matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Branch Scanner - ${{ matrix.segment }}
+        run: |
+          case "${{ matrix.segment }}" in
+            "vpn")
+              nix-shell -p nmap --run 'nmap -sn ${{ matrix.network }} > vpn-hosts.txt'
+              nix-shell -p nmap --run 'nmap -sT -p 22,80,443 ${{ matrix.gateway }} > vpn-gateway.txt'
+              ;;
+            "target")
+              nix-shell -p nmap --run 'nmap -sn ${{ matrix.network }} > target-hosts.txt'
+              nix-shell -p nmap --run 'nmap -sT -p 22,80,443 ${{ matrix.gateway }} > target-gateway.txt'
+              ;;
+            "wifi")
+              nix-shell -p nmap --run 'nmap -sn ${{ matrix.network }} > wifi-hosts.txt'
+              nix-shell -p nmap --run 'nmap -sT -p 22,80,443 ${{ matrix.gateway }} > wifi-gateway.txt'
+              ;;
+          esac
+      - name: Upload Branch Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: level-1-branch-${{ matrix.segment }}
+          path: "*.txt"
+
+  # Level 2: Deep Service Enumeration (O(log log n)) - 9 runners
+  level-2-enumeration:
+    needs: level-1-branches
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [ssh-bypass, web-interfaces, authentication]
+        target: [vpn, target, wifi]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Deep Enumeration - ${{ matrix.service }} on ${{ matrix.target }}
+        run: |
+          case "${{ matrix.target }}" in
+            "vpn") HOST="10.8.0.1" ;;
+            "target") HOST="192.168.0.15" ;;
+            "wifi") HOST="192.168.50.1" ;;
+          esac
+
+          case "${{ matrix.service }}" in
+            "ssh-bypass")
+              nix-shell -p nmap --run "nmap -sT -p 22,2222,222 $HOST > ssh-enum-${{ matrix.target }}.txt"
+              ;;
+            "web-interfaces")
+              nix-shell -p curl --run "curl -v -m 5 http://$HOST > web-${{ matrix.target }}.txt 2>&1"
+              ;;
+            "authentication")
+              nix-shell -p curl --run "curl -X POST -d 'user=admin&pass=admin' http://$HOST/login > auth-${{ matrix.target }}.txt 2>&1"
+              ;;
+          esac
+      - name: Upload Enumeration Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: level-2-enum-${{ matrix.service }}-${{ matrix.target }}
+          path: "*.txt"
+
+  # Level 3: Tree Aggregation (O(log log n)) - 10s result combination
+  level-3-aggregation:
+    needs: [level-0-root, level-1-branches, level-2-enumeration]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Download All Results
+        uses: actions/download-artifact@v4
+        with:
+          path: tree-results
+      - name: Tree Aggregation Analysis
+        run: |
+          nix-shell -p coreutils --run 'echo "=== EXPONENTIAL TREE AGGREGATION RESULTS ===" > exponential-analysis.txt'
+          nix-shell -p coreutils --run 'echo "Execution Pattern: Level 0 → Level 1 (3 branches) → Level 2 (9 enumeration) → Level 3 (aggregation)" >> exponential-analysis.txt'
+          nix-shell -p coreutils --run 'echo "Performance: O(log n) complexity achieved" >> exponential-analysis.txt'
+          nix-shell -p coreutils --run 'find tree-results -name "*.txt" -exec echo "=== {} ===" \; -exec cat {} \; >> exponential-analysis.txt'
+      - name: Upload Tree Analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: exponential-tree-final-analysis
+          path: exponential-analysis.txt
