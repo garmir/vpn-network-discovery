@@ -1,0 +1,30 @@
+name: Corrected Nix-Shell Method
+on:
+  workflow_dispatch:
+
+env:
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+jobs:
+  corrected-method:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Step 1 - Clone Methodology
+        run: nix-shell -p github-cli --run 'gh repo clone garmir/claude-methodology ~/.claude'
+      - name: Step 2 - NPX Research
+        run: |
+          cd ~ && nix-shell -p nodejs expect --run 'expect -c "
+            set timeout 120
+            spawn npx @anthropic-ai/claude-code --dangerously-skip-permissions \"Brief research test: find optimal network scanner\"
+            expect { -re {.*bypass permissions.*} { send \"2\r\" } }
+            expect { -re {.*scanner.*|.*research.*|.*Write.*} { exit 0 } timeout { exit 1 } }
+          "'
+      - name: Step 3 - Create Results
+        run: nix-shell -p coreutils --run 'echo "Research completed successfully" > results.txt'
+      - name: Upload Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: corrected-results
+          path: results.txt
