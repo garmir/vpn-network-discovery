@@ -1,0 +1,57 @@
+name: Working Matrix - VPN Discovery (Fixed)
+on:
+  workflow_dispatch:
+
+jobs:
+  setup-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.setmatrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Generate Dynamic Matrix
+        id: setmatrix
+        run: |
+          nix-shell -p jq --run 'jq -cn --arg vpn "10.8.0.1" --arg target "192.168.0.15" --arg gateway "192.168.50.1" "{\"include\":[{\"name\":\"vpn-gateway\",\"host\":\$vpn,\"ports\":\"22,80,443\"},{\"name\":\"target-system\",\"host\":\$target,\"ports\":\"22,80,443\"},{\"name\":\"wifi-gateway\",\"host\":\$gateway,\"ports\":\"22,80,443\"}]}"' > matrix.json
+          echo "matrix=$(cat matrix.json)" >> $GITHUB_OUTPUT
+
+  network-scan:
+    needs: setup-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Scan Host - ${{ matrix.name }}
+        run: |
+          nix-shell -p nmap --run 'nmap -sT -p ${{ matrix.ports }} ${{ matrix.host }} > scan-${{ matrix.name }}.txt'
+          nix-shell -p curl --run 'curl -v -m 5 http://${{ matrix.host }} > http-${{ matrix.name }}.txt 2>&1'
+      - name: Upload Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: network-scan-${{ matrix.name }}
+          path: "*.txt"
+
+  analyze-results:
+    needs: network-scan
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Download All Results
+        uses: actions/download-artifact@v4
+        with:
+          path: all-scans
+      - name: Aggregate Analysis
+        run: |
+          nix-shell -p coreutils --run 'echo "=== VPN NETWORK ANALYSIS RESULTS ===" > final-analysis.txt'
+          nix-shell -p coreutils --run 'echo "Timestamp: $(date)" >> final-analysis.txt'
+          nix-shell -p coreutils --run 'find all-scans -name "*.txt" -exec cat {} \; >> final-analysis.txt'
+      - name: Upload Final Analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpn-network-final-analysis
+          path: final-analysis.txt
