@@ -1,0 +1,134 @@
+name: Claude Code Research with .claude Methodology
+on:
+  workflow_dispatch:
+    inputs:
+      research_target:
+        description: 'Research target'
+        required: true
+        default: 'network infrastructure analysis'
+
+env:
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+jobs:
+  # Setup Claude with .claude methodology repository
+  setup-claude-context:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Install Claude Code and Setup Context
+        run: |
+          nix-shell -p nodejs npm git --run 'npm install -g @anthropic-ai/claude-code'
+          nix-shell -p git coreutils --run 'cd ~ && git clone https://github.com/garmir/claude-methodology.git .claude'
+          nix-shell -p coreutils --run 'echo "Claude Code context setup complete" > claude-setup.txt'
+      - name: Upload Setup Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-setup
+          path: claude-setup.txt
+
+  # Network Research Agent with Full .claude Context
+  network-research-agent:
+    needs: setup-claude-context
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Setup Claude Environment
+        run: |
+          nix-shell -p nodejs npm git --run 'npm install -g @anthropic-ai/claude-code'
+          nix-shell -p git --run 'cd ~ && git clone https://github.com/garmir/claude-methodology.git .claude'
+      - name: Execute Network Research
+        run: |
+          cd ~ && nix-shell -p nodejs npm nmap curl dnsutils expect --run 'expect -c "
+            set timeout 300
+            spawn npx @anthropic-ai/claude-code --dangerously-skip-permissions \"Using .claude methodology: perform comprehensive network infrastructure analysis for ${{ github.event.inputs.research_target }}. Use parallel workflow optimization patterns from .claude documentation.\"
+            expect { -re {.*bypass permissions.*} { send \"2\r\" } }
+            expect { -re {.*analysis.*|.*Write.*|.*methodology.*} { exit 0 } timeout { exit 1 } }
+          "'
+      - name: Upload Research Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: network-research-results
+          path: "*.txt *.md"
+
+  # Security Research Agent with .claude Methodology
+  security-research-agent:
+    needs: setup-claude-context
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Setup Claude Environment
+        run: |
+          nix-shell -p nodejs npm git --run 'npm install -g @anthropic-ai/claude-code'
+          nix-shell -p git --run 'cd ~ && git clone https://github.com/garmir/claude-methodology.git .claude'
+      - name: Execute Security Research
+        run: |
+          cd ~ && nix-shell -p nodejs npm nmap sqlmap nikto tor expect --run 'expect -c "
+            set timeout 300
+            spawn npx @anthropic-ai/claude-code --dangerously-skip-permissions \"Apply .claude security research methodology: analyze ${{ github.event.inputs.research_target }} using documented SSH bypass techniques, Tor methodologies, and network penetration patterns from .claude repository.\"
+            expect { -re {.*bypass permissions.*} { send \"2\r\" } }
+            expect { -re {.*security.*|.*analysis.*|.*Write.*} { exit 0 } timeout { exit 1 } }
+          "'
+      - name: Upload Security Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-research-results
+          path: "*.txt *.md"
+
+  # Systems Research Agent with NixOS Methodology
+  systems-research-agent:
+    needs: setup-claude-context
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Setup Claude Environment
+        run: |
+          nix-shell -p nodejs npm git --run 'npm install -g @anthropic-ai/claude-code'
+          nix-shell -p git --run 'cd ~ && git clone https://github.com/garmir/claude-methodology.git .claude'
+      - name: Execute Systems Research
+        run: |
+          cd ~ && nix-shell -p nodejs npm nixos-install-tools openssh expect --run 'expect -c "
+            set timeout 300
+            spawn npx @anthropic-ai/claude-code --dangerously-skip-permissions \"Using .claude NixOS methodology: research nixos-enter techniques, remote system access methods, and system administration approaches for ${{ github.event.inputs.research_target }}. Reference documented patterns in .claude repository.\"
+            expect { -re {.*bypass permissions.*} { send \"2\r\" } }
+            expect { -re {.*nixos.*|.*systems.*|.*Write.*} { exit 0 } timeout { exit 1 } }
+          "'
+      - name: Upload Systems Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: systems-research-results
+          path: "*.txt *.md"
+
+  # Methodology Validation Agent
+  methodology-validation:
+    needs: [network-research-agent, security-research-agent, systems-research-agent]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Setup Claude Environment
+        run: |
+          nix-shell -p nodejs npm git --run 'npm install -g @anthropic-ai/claude-code'
+          nix-shell -p git --run 'cd ~ && git clone https://github.com/garmir/claude-methodology.git .claude'
+      - name: Download All Research Results
+        uses: actions/download-artifact@v4
+        with:
+          path: claude-research-results
+      - name: Execute Methodology Validation
+        run: |
+          cd ~ && nix-shell -p nodejs npm coreutils jq expect --run 'expect -c "
+            set timeout 300
+            spawn npx @anthropic-ai/claude-code --dangerously-skip-permissions \"Validate research results against .claude methodology: analyze all artifacts from network, security, and systems research agents. Compare findings with documented patterns and update methodology documentation with successes and failures.\"
+            expect { -re {.*bypass permissions.*} { send \"2\r\" } }
+            expect { -re {.*validation.*|.*methodology.*|.*Write.*} { exit 0 } timeout { exit 1 } }
+          "'
+      - name: Upload Validation Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: methodology-validation-results
+          path: "*.txt *.md"
