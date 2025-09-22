@@ -1,0 +1,19 @@
+name: Minimal Success Test - V4
+on:
+  workflow_dispatch:
+
+jobs:
+  minimal-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Basic Test
+        run: nix-shell -p coreutils --run 'echo "Workflow V4 success" > success.txt'
+      - name: Network Test
+        run: nix-shell -p curl --run 'curl -s https://httpbin.org/ip > ip-result.txt'
+      - name: Upload Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: minimal-test-results
+          path: "*.txt"
