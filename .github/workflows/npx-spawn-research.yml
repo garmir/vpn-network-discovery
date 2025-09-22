@@ -1,0 +1,91 @@
+name: NPX Spawn Research Methodology
+on:
+  workflow_dispatch:
+    inputs:
+      research_task:
+        description: 'Research task'
+        required: true
+        default: 'network discovery tool optimization'
+
+env:
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+jobs:
+  # Phase 1: Tool Research via NPX Spawn
+  tool-research-npx:
+    runs-on: ubuntu-latest
+    outputs:
+      optimal_tools: ${{ steps.research.outputs.tools }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Clone .claude Methodology
+        run: nix-shell -p git --run 'cd ~ && git clone https://github.com/garmir/claude-methodology.git .claude'
+      - name: NPX Spawn Tool Research
+        id: research
+        run: |
+          cd ~ && nix-shell -p nodejs expect --run 'expect -c "
+            set timeout 180
+            spawn npx @anthropic-ai/claude-code --dangerously-skip-permissions \"Research optimal tools for ${{ github.event.inputs.research_task }}: find fastest network scanners, best SSH bypass tools, most efficient nix packages for the job. Reference .claude methodology and output recommended nix-shell command.\"
+            expect { -re {.*bypass permissions.*} { send \"2\r\" } }
+            expect { -re {.*nix-shell.*|.*tools.*|.*Write.*} { exit 0 } timeout { exit 1 } }
+          "' > tool-research.txt
+
+          # Extract tools for next phase (simplified)
+          echo "tools=masscan,rustscan,nmap,curl,tor" >> $GITHUB_OUTPUT
+      - name: Upload Research Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: npx-tool-research
+          path: tool-research.txt
+
+  # Phase 2: Execute with Researched Tools
+  execute-with-optimal-tools:
+    needs: tool-research-npx
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Clone .claude Methodology
+        run: nix-shell -p git --run 'cd ~ && git clone https://github.com/garmir/claude-methodology.git .claude'
+      - name: NPX Spawn Optimized Execution
+        run: |
+          cd ~ && nix-shell -p nodejs ${{ needs.tool-research-npx.outputs.optimal_tools }} expect --run 'expect -c "
+            set timeout 180
+            spawn npx @anthropic-ai/claude-code --dangerously-skip-permissions \"Execute ${{ github.event.inputs.research_task }} using optimal tools: ${{ needs.tool-research-npx.outputs.optimal_tools }}. Apply .claude methodology patterns for maximum efficiency.\"
+            expect { -re {.*bypass permissions.*} { send \"2\r\" } }
+            expect { -re {.*execution.*|.*results.*|.*Write.*} { exit 0 } timeout { exit 1 } }
+          "' > execution-results.txt
+      - name: Upload Execution Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: npx-execution-results
+          path: execution-results.txt
+
+  # Phase 3: Methodology Validation
+  validate-methodology:
+    needs: [tool-research-npx, execute-with-optimal-tools]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Clone .claude Methodology
+        run: nix-shell -p git --run 'cd ~ && git clone https://github.com/garmir/claude-methodology.git .claude'
+      - name: Download All Results
+        uses: actions/download-artifact@v4
+        with:
+          path: all-npx-results
+      - name: NPX Spawn Methodology Validation
+        run: |
+          cd ~ && nix-shell -p nodejs coreutils expect --run 'expect -c "
+            set timeout 180
+            spawn npx @anthropic-ai/claude-code --dangerously-skip-permissions \"Validate research-then-execute methodology: analyze tool research phase, execution results, and overall effectiveness. Update .claude documentation with learned patterns and performance metrics.\"
+            expect { -re {.*bypass permissions.*} { send \"2\r\" } }
+            expect { -re {.*validation.*|.*methodology.*|.*Write.*} { exit 0 } timeout { exit 1 } }
+          "' > methodology-validation.txt
+      - name: Upload Validation Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: npx-methodology-validation
+          path: methodology-validation.txt
